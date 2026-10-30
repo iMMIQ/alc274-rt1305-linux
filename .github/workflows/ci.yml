@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: GPL-2.0-only
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.compiler }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Unit tests
+        run: make test HOSTCC=${{ matrix.compiler }}
+      - name: Address and undefined behavior sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: halt_on_error=1
+        run: |
+          make test HOSTCC=${{ matrix.compiler }} \
+            HOSTCFLAGS='-O1 -g -std=gnu11 -Wall -Wextra -Werror -Wno-unused-parameter -fsanitize=address,undefined -fno-omit-frame-pointer'
+
+  module:
+    name: Linux 6.12 module
+    runs-on: ubuntu-24.04
+    container: debian:trixie-slim
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      KERNEL_SRC: /tmp/linux-source-6.12
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates gcc git libelf-dev make patch perl sparse xz-utils \
+            linux-headers-amd64 linux-source-6.12
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Extract kernel sources
+        run: |
+          tar -xJf /usr/src/linux-source-6.12.tar.xz -C /tmp \
+            linux-source-6.12/sound/pci/hda \
+            linux-source-6.12/scripts/checkpatch.pl \
+            linux-source-6.12/scripts/spelling.txt \
+            linux-source-6.12/scripts/const_structs.checkpatch
+      - name: Check kernel C style
+        run: |
+          perl "$KERNEL_SRC/scripts/checkpatch.pl" --no-tree --strict --file \
+            kernel/alc274_rt1305.c kernel/alc274_rt1305_eq.h
+      - name: Build module and run Sparse
+        run: |
+          headers=(/usr/src/linux-headers-*-amd64)
+          make -j2 KDIR="${headers[0]}" W=1 C=2 \
+            KCFLAGS=-Werror CHECK='sparse -Wsparse-error'

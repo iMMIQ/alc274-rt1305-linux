@@ -58,6 +58,9 @@ The C tests run the driver logic against a modeled HDA bridge. They cover
 EQ programming, error recovery, mute restoration, resume state, polling
 limits, hardware matching and sample-rate changes.
 
+CI runs GCC/Clang tests, ASan/UBSan, checkpatch, a Linux 6.12 module build and
+Sparse checks.
+
 ## License
 
 [GNU GPL v2](LICENSE) (`GPL-2.0-only`).
